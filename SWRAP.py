@@ -74,6 +74,8 @@ class SWRAP(object):
 
         self.mode = mode
 
+        self.popfilterthreshold = 100
+
         # for tape recording (continuous 'tape' of recent audio)
         self.tape = TapeRecorder()
         self.tape_is_recording = False # Is the tape being written to?
@@ -141,15 +143,39 @@ class SWRAP(object):
 
     def trim(self, data):
         # def _trimside(self, data):
-        datacop = array('h')
+        datacopy = array('h')
         for chunk in data:
             if abs(chunk) > self.trim_threshold:
-                datacop.append(chunk)
+                datacopy.append(chunk)
             else:
-                datacop.append(0)
+                datacopy.append(0)
         # The array now has a bunch of 0's at the beginning and end
 
-        return np.trim_zeros(np.asarray(datacop, dtype='<h'))
+        return np.trim_zeros(np.asarray(datacopy, dtype='<h'))
+
+    def popfilter(self, data):
+        datacopy = array('h')
+        initial_detection = 0
+        end_of_current_detection = 0
+        length_of_detection = 0
+        skip_to = 0
+        for i in range(len(data)):
+            log.info("WHAT")
+            if skip_to > i:
+                datacopy.append(0)
+                continue
+            if data[i] > self.threshold/100: # bigger than zero
+                initial_detection = i
+                for j in range(i,len(data)):
+                    if data[j] < self.threshold/100: # implies it went back to zero
+                        end_of_current_detection = j
+                        break
+            length_of_detection = end_of_current_detection - initial_detection
+            if length_of_detection < self.popfilterthreshold:
+                skip_to = end_of_current_detection
+            datacopy.append(data[i])
+        return np.trim_zeros(np.asarray(datacopy, dtype='<h'))
+
 
     def add_silence(self, data, seconds_of_silence):
         # I'm not too sure this is needed yet..
@@ -181,6 +207,7 @@ class SWRAP(object):
     def clean_tape(self, wav):
         wav = self.normalize(wav)
         wav = self.trim(wav)
+        wav = self.popfilter(wav) # VERY EXPERIMENTAL
         # wav = self.add_silence(wav, 0.5)
 
         return wav
